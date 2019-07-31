@@ -5,6 +5,26 @@
 Param(    
     [Switch]$StopService
 )
+DynamicParam{
+    If ($StopService){
+        $Attrib = New-Object System.Management.Automation.ParameterAttribute
+        $Attrib.Mandatory = $false
+        $Attrib.ParameterSetName = 'StopGroup'        
+    
+        $AttribCollection = New-Object System.Collections.ObjectModel.Collection[System.Attribute]
+        $AttribCollection.Add($Attrib)
+
+        $DynSJC = New-Object System.Management.Automation.RuntimeDefinedParameter("SkipJobCheck",[Switch],$Attrib)
+        $DynSBC = New-Object System.Management.Automation.RuntimeDefinedParameter("SkipBackupCheck",[Switch],$Attrib)
+
+        $ParamDictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
+        $ParamDictionary.Add("SkipJobCheck", $DynSJC)
+        $ParamDictionary.Add("SkipBackupCheck", $DynSBC)
+        return $ParamDictionary
+    }
+}
+
+Process{
 
 Write-Verbose "Loading SQL Management Object..."
 If ([Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.Smo")){            
@@ -230,22 +250,26 @@ Function Stop-SQLServices{
         Exit 1
     }
 
-    Write-Verbose "Checking Sql Job Activities..."
-    #$true means it is idle
-    $BkJob = Test-SQLJobActivity
-    If ($BkJob -contains $false){
-        $Msg = "SQL agent job is still running! Please check the report."
-        Write-Warning $Msg
-        #[Environment]::Exit(3)
-        Exit 1
+    If (-Not($PSBoundParameters.ContainsKey('SkipJobCheck'))){
+        Write-Verbose "Checking Sql Job Activities..."
+        #$true means it is idle
+        $BkJob = Test-SQLJobActivity
+        If ($BkJob -contains $false){
+            $Msg = "SQL agent job is still running! Please check the report."
+            Write-Warning $Msg
+            #[Environment]::Exit(3)
+            Exit 1
+        }
     }
     
-    Write-Verbose "Checking the last backup..."
-    If (Test-DbBackupInfo){
-        $Msg = "One of the last SQL Backup job is not succeeded! Please check the report."
-        Write-Warning $Msg                
-        #[Environment]::Exit(4)
-        Exit 1
+    If (-Not($PSBoundParameters.ContainsKey('SkipBackupCheck'))){
+        Write-Verbose "Checking the last backup..."
+        If (Test-DbBackupInfo){
+            $Msg = "One of the last SQL Backup job is not succeeded! Please check the report."
+            Write-Warning $Msg                
+            #[Environment]::Exit(4)
+            Exit 1
+        }
     }
 
     If ($StopService){
@@ -256,4 +280,5 @@ Function Stop-SQLServices{
         Stop-SQLServices -Wait
     }
     Exit 0
+}
 #endregion
