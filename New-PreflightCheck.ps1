@@ -68,6 +68,7 @@ Function Get-DriveSpace{
         @{n='FreeSpaceGB';e={[Math]::Round($_.FreeSpace/1GB,2)}},
         @{n='UsedSpaceGB';e={([Math]::Round($_.Size/1GB,2))-([Math]::Round($_.FreeSpace/1GB,2))}},
         @{n='TotalSizeGB';e={[Math]::Round($_.Size/1GB,2)}},
+        @{n="UsedPercent(%)";e={"{0:N2}" -f ((($_.Size - $_.FreeSpace)/$_.Size)*100) }},
         'VolumeName'
     )
     If ($Drive){
