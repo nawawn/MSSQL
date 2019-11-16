@@ -29,7 +29,7 @@ Function Start-PreflightCheck{
         }
     }
 
-    $ReportPath = "\\blm-scm-01\reports\PreFlightChecks"
+    $ReportPath = "\\FileServer\reports\PreFlightChecks"
     $CsvPath    = "C:\temp"
     If (-Not(Test-Path -path $ReportPath)){
         Write-Warning "$ReportPath Path not found"
@@ -165,8 +165,6 @@ Function Get-DbBackupInfo{
     }    
 }
 
-Function Test-DbBackupInfo{}
-
 Function Get-SQLJobActivity{
     [CmdletBinding()]
     Param(
@@ -277,7 +275,7 @@ Function Stop-SQLServices{
             [void][Reflection.assembly]::LoadWithPartialName("Microsoft.SqlServer.SqlWmiManagement")
             
             $SqlServer = New-Object Microsoft.SqlServer.Management.Smo.Server($ComputerName)
-            $SqlConf = New-Object Microsoft.SqlServer.Management.Smo.Wmi.ManagedComputer $SqlServer.ComputerNamePhysicalNetBIOS            
+            $SqlConf   = New-Object Microsoft.SqlServer.Management.Smo.Wmi.ManagedComputer $SqlServer.ComputerNamePhysicalNetBIOS            
         }    
         Else {         
             Write-Warning "Please install MS SQL Management Studio"   
@@ -317,8 +315,8 @@ Function Start-SQLServices{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$CSVPath = "\\blm-scm-01\Reports\CSV",
-        [System.IO.FileInfo]$MasterList = '\\blm-scm-01\reports\Scripts\MasterList.psd1'
+        [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
+        [System.IO.FileInfo]$MasterList = '\\FileServer\reports\Scripts\MasterList.psd1'
     )
     Begin {
         $CsvFile = "$CSVPath\$ComputerName.csv"
@@ -360,7 +358,7 @@ Function Start-SQLServices1{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$CSVPath = "\\blm-scm-01\Reports\CSV",
+        [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
         [Switch]$Wait  
     )
     Begin{
@@ -422,7 +420,7 @@ Function Get-SQLServerHtmlReport{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$OutputPath = "\\blm-scm-01\Reports\PreFlightChecks"
+        [System.IO.FileInfo]$OutputPath = "\\FileServer\Reports\PreFlightChecks"
     )
     Begin{
         $Head = @"
@@ -463,7 +461,7 @@ Function Get-SQLServiceCsvReport{
         [Parameter(ValueFromPipeline,ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$OutputPath = "\\blm-scm-01\Reports\CSV"
+        [System.IO.FileInfo]$OutputPath = "\\FileServer\Reports\CSV"
     )
     Process{
         Write-Verbose "Generating CSV for SQL services..."
