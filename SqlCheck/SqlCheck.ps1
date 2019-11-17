@@ -320,16 +320,16 @@ Function Start-SQLServices{
     )
     Begin {
         $CsvFile = "$CSVPath\$ComputerName.csv"
+        $RunningSrv = @()
         If (Test-Path $CsvFile){
-            $Csv = Import-Csv $CsvFile
-            #$Csv
-            $CsvRunningSrv = ($Csv | Where-Object{$_.ServiceState -eq "Running"} | Select-Object -ExpandProperty Name)
-            $CsvRunningSrv | Get-Service -ComputerName $ComputerName | Start-Service
+            $Csv = Import-Csv $CsvFile            
+            $RunningSrv = ($Csv | Where-Object{$_.ServiceState -eq "Running"} | Select-Object -ExpandProperty Name)            
         }
-        Elseif(Test-Path $MasterList){
-            Write-Warning "Unable to find the Services CSV file: $CsvFile"
+        Elseif(Test-Path $MasterList){            
             $ServiceList = Import-PowerShellDataFile $MasterList
-            If ($null -ne $($ServiceList.$ComputerName.Running.Name)){
+            $RunningSrv = $($ServiceList.$ComputerName.Running.Name)
+            
+            If ($ServiceName){
                 $ServiceList.$ComputerName.Running.Name | Get-Service -ComputerName | Start-Service
             }
             Else {

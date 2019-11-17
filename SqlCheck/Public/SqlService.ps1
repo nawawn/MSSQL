@@ -68,39 +68,30 @@ Function Start-SQLServices{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$CsvPath = "\\FileServer\Reports\CSV",
+        [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
         [System.IO.FileInfo]$MasterList = '\\FileServer\reports\Scripts\MasterList.psd1'
     )
     Begin {
-        $CsvFile = "$CSVPath\$ComputerName.csv"
-        If (Test-Path $CsvFile){
-            $Csv = Import-Csv $CsvFile
-            #$Csv
-            $CsvRunningSrv = ($Csv | Where-Object{$_.ServiceState -eq "Running"} | Select-Object -ExpandProperty Name)
-            $CsvRunningSrv | Get-Service -ComputerName $ComputerName | Start-Service
-        }
-        Elseif(Test-Path $MasterList){
-            Write-Warning "Unable to find the Services CSV file: $CsvFile"
-            $ServiceList = Import-PowerShellDataFile $MasterList
-            If ($null -ne $($ServiceList.$ComputerName.Running.Name)){
-                $ServiceList.$ComputerName.Running.Name | Get-Service -ComputerName | Start-Service
-            }
-            Else {
-                Write-Warning "Unable to obtain running services from the Master Service List for $ComputerName!"
-            }
-        }
-        Else{
-            Write-Warning "Please manually restart the Sql services or reboot the server!"
-        }
+        $RunningSrv = @()
+        $CsvFile    = "$CSVPath\$ComputerName.csv"        
     }
     Process {
-        If ($CsvRunningSrv){
+        If (Test-Path -Path $CsvFile){
+            $Csv = Import-Csv -Path $CsvFile            
+            $RunningSrv = ($Csv | Where-Object{$_.ServiceState -eq "Running"} | Select-Object -ExpandProperty Name)            
+        }
+        Elseif (Test-Path -Path $MasterList){            
+            $ServiceList = Import-PowerShellDataFile -Path $MasterList
+            $RunningSrv = $($ServiceList.$ComputerName.Running.Name)            
+        }
+        Else{
+            Write-Warning "Unable to obtain running services details from either CSV or PSD1 file!"
+        }
+        If ($RunningSrv){
             Write-Verbose "Starting services according to running state in CSV..."       
-            $CsvRunningSrv | Get-Service -ComputerName $ComputerName | Start-Service
+            $RunningSrv | Get-Service -ComputerName $ComputerName | Start-Service
         } 
-        Else{            
-            Write-Warning "Unable to find the CSV file with Services info"
-            Write-Warning "The start-up process for services is ignored."
+        Else{
             Write-Warning "Please reboot the server, if the problem persists."
         }
     }
