@@ -331,28 +331,37 @@ Function Start-SQLServices{
     Process {
         If (Test-Path -Path $CsvFile){
             $Csv = Import-Csv -Path $CsvFile            
-            $RunningSrv = ($Csv | Where-Object{$_.ServiceState -eq "Running"} | Select-Object -ExpandProperty Name)            
+            $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty Name)            
         }
         Elseif(Test-Path -Path $MasterList){            
             $ServiceList = Import-PowerShellDataFile -Path $MasterList
             $RunningSrv = $($ServiceList.$ComputerName.Running.Name)            
         }
         Else{
-            Write-Warning "Unable to obtain running services details from both CSV and PSD1 file!"
+            Write-Warning "Unable to obtain running services details from either CSV or PSD1 file!"
         }
         If ($RunningSrv){
-            Write-Verbose "Starting services according to previous running state..."       
+            Write-Verbose "Starting services according to the previous running state..."       
             #$RunningSrv | Get-Service -ComputerName $ComputerName | Start-Service
             Foreach($Service in $RunningSrv){
                 If (-Not(Test-ServiceStatus -Name $Service -Status 'Running' -ComputerName $ComputerName)){
                     $SrvToStart += $Service
                 }
             }
-            $SrvToStart | Get-Service -ComputerName $ComputerName | Start-Service
+            #Start the required service first - MSSQLSERVER, then start the rest
+            $SrvToStart | Get-Service -ComputerName $ComputerName -RequiredServices | Start-Service
+            $SrvToStart | Get-Service -ComputerName $ComputerName | Where-Object{$_.Status -ne 'Running'} | Start-Service
         } 
         Else{
-            Write-Warning "Please reboot the server, if the problem persists."
+            Write-Verbose "Starting services startup mode set to Automatic..."
+            # Errors from start-service are non-terminating ones. So, try{}catch{} won't work unless you specify '-ea stop'
+            $SrvToStart = (Get-DbaService -ComputerName $ComputerName | Where-Object{$_.StartMode -eq 'Automatic'}).ServiceName
+            $SrvToStart | Get-Service -ComputerName $ComputerName -RequiredServices | Start-Service
+            $SrvToStart | Get-Service -ComputerName $ComputerName | Where-Object{$_.Status -ne 'Running'} | Start-Service
+            
+            Write-Verbose "Please reboot the server, if the problem persists."
         }
+        
     }
 }
 
