@@ -3,9 +3,10 @@
 # This script requires DbaTools PowerShell Module
 # Arguments for Preflight check
 $Params = @{
-    ReportPath = "\\FileServer\reports\PreFlightChecks"
-    CsvPath    = "\\FileServer\reports\CSV"
-    MasterList = "\\FileServer\reports\Scripts\MasterList.psd1"
+    PreReportPath  = "\\FileServer\reports\PreFlightChecks"
+    PostReportPath = "\\FileServer\reports\PostFlightChecks"
+    CsvPath        = "\\FileServer\reports\CSV"
+    MasterList     = "\\FileServer\reports\Scripts\MasterList.psd1"
 }
 Function Start-PreflightCheck{
 
@@ -36,7 +37,7 @@ Function Start-PreflightCheck{
         }
     }
     Begin{
-        $ReportPath = $Params.ReportPath
+        $ReportPath = $Params.PreReportPath
         $CsvPath    = $Params.CsvPath
     }
     Process{
@@ -52,7 +53,7 @@ Function Start-PreflightCheck{
         Get-SqlServiceCsvReport -ComputerName $ComputerName -OutputPath $CsvPath
 
         Write-Verbose "Function Call: Get-SQLServerHtmlReport"
-        Get-SQLServerHtmlReport -ComputerName $ComputerName -OutputPath $ReportPath
+        Get-SQLServerHtmlReport -ComputerName $ComputerName -OutputPath $ReportPath -Suffix 'Pre'
         
         If(-Not($PSBoundParameters.ContainsKey('SkipDriveCheck'))){
             Write-Verbose "Function Call: Test-DriveSpace"
@@ -81,11 +82,36 @@ Function Start-PreflightCheck{
 
         If ($StopService){
             Write-Verbose "Function Call: Stop-SqlServices"
-            Stop-SQLServices -ComputerName $ComputerName -Wait
+            Stop-SQLServices -ComputerName $ComputerName
         }
 
     }    
 }
+
+Function Start-PostflightCheck{
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [String]$ComputerName,
+        [Switch]$StartService
+    )
+    Begin{
+        $ReportPath = $Params.PostReportPath
+    }
+    Process{
+        Write-Verbose "Function Call: Get-SQLServices"
+        $BeforeStart  = Get-SQLServices -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>Before SQL Services Restart</h4>' -PostContent '<br/>' | Out-String
+        
+        If ($StartService){
+            Write-Verbose "Function Call: Start-SQLServices"
+            Start-SQLServices -ComputerName $ComputerName
+        }
+
+        Write-Verbose "Function Call: Get-SQLServerHtmlReport"
+        Get-SQLServerHtmlReport -ComputerName $ComputerName -OutputPath $ReportPath -HtmlFragment $BeforeStart -Suffix 'Post'
+    }
+}
+
 Function Get-DriveSpace{
     [CmdletBinding()]
     Param(
@@ -344,6 +370,7 @@ Function Stop-SQLServices{
         }
     }        
 }
+
 Function Test-ServiceStatus{
     #Is the service running
     [CmdletBinding()]
@@ -360,6 +387,7 @@ Function Test-ServiceStatus{
         return ($Status -eq (Get-Service -Name $Name -ComputerName $ComputerName -ErrorAction 'SilentlyContinue').Status)
     }
 }
+
 Function Start-SQLServices{
     [CmdletBinding()]
     Param(
@@ -410,73 +438,12 @@ Function Start-SQLServices{
     }
 }
 
-Function Start-SQLServices1{
-    #This doesn't work on remote machine - only works on local machine
-    Param(
-        [Parameter()][ValidateNotNullOrEmpty()]
-        [String]$ComputerName,
-        [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
-        [Switch]$Wait  
-    )
-    Begin{
-        $CsvFile = "$CSVPath\$ComputerName.csv"
-        If (Test-Path $CsvFile){
-            $Csv = Import-Csv $CsvFile
-            #$Csv
-            $CsvRunningSrv = ($Csv | Where-Object{$_.ServiceState -eq "Running"} | Select-Object -ExpandProperty Name)
-        }
-        Else {
-            Write-Warning "Unable to find the Services CSV file: $CsvFile"
-        }
-    }
-    Process{
-        Write-Verbose "Loading SQL Management Object..."
-        If ([Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.Smo")){            
-            [void][System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO")
-            [void][System.Reflection.assembly]::LoadWithPartialName("Microsoft.SqlServer.SqlWmiManagement")
-            
-            $SqlServer  = New-Object Microsoft.SqlServer.Management.Smo.Server($ComputerName)
-            $SqlConfMgr = New-Object Microsoft.SqlServer.Management.Smo.Wmi.ManagedComputer $SqlServer.ComputerNamePhysicalNetBIOS            
-        }    
-        Else {         
-            Write-Warning "Please install MS SQL Management Studio"   
-            [Environment]::Exit(1)
-        }
-        If ($CsvRunningSrv){
-            Write-Verbose "Starting services which have running state in CSV..."       
-            $SqlConfMgr.Services | 
-                Where-Object{($_.ServiceState -eq "Stopped") -and ($CsvRunningSrv -contains $_.Name)} | 
-                ForEach-Object{$_.start()}
-                #Select-Object Name,ServiceState
-            If ($Wait){                       
-                Do {
-                    [Bool]$IsStopped = (($CsvRunningSrv | Get-Service -ComputerName $ComputerName | Where-Object{$_.Status -eq "Stopped"}).Count -gt 0)
-                    Write-Verbose "Services still being started? $IsStopped"
-                    Start-Sleep 3
-                }While($IsStopped)        
-            }    
-        }
-        #Elseif ("FileNotFile"){ #check the master sql services list from psd file}  
-        #### This needs to be fixed....  
-        Else{            
-            Write-Verbose "Starting all services with StartMode set to Auto..."
-            $SqlConfMgr.Services | Where-Object{$_.ServiceState -eq "Stopped" -and $_.StartMode -eq "Auto"} | ForEach-Object{$_.start()}
-            If ($Wait){            
-                $SrvName = $SqlConfMgr.Services | Where-Object{$_.ServiceState -eq "Stopped" -and $_.StartMode -eq "Auto"} | Select-Object -ExpandProperty Name
-                Do {
-                    [Bool]$IsStopped = (($SrvName | Get-Service -ComputerName $ComputerName | Where-Object{$_.Status -eq "Stopped"}).Count -gt 0)
-                    Write-Verbose "Services being started? $IsStopped"
-                    Start-Sleep 3
-                }While($IsStopped)        
-            }
-        }
-    }        
-}
-
 Function Get-SQLServerHtmlReport{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
+        [String]$HtmlFragment,
+        [String]$Suffix = 'Pre',
         [System.IO.FileInfo]$OutputPath = "\\FileServer\Reports\PreFlightChecks"
     )
     Begin{
@@ -488,7 +455,7 @@ Function Get-SQLServerHtmlReport{
         </style>   
 "@
     }
-    Process{
+    Process{        
         #Generate the report
         $CInfo   = Get-DriveSpace -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>Drive Details</h4>' -PostContent '<br/>' | Out-String
         $SqlSer  = Get-SQLServices -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Services Details</h4>' -PostContent '<br/>' | Out-String
@@ -499,16 +466,24 @@ Function Get-SQLServerHtmlReport{
         $DBJob   = Get-SQLJobActivity -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Job Activities</h4>' -PostContent '<br/>' | Out-String
         $SqlLog  = Get-SQLLog -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Log from today</h4>' -PostContent '<br/>' | Out-String
         #$SqlErr  = Get-DbErrorLog -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Error Log from today</h4>' -PostContent '<br/>' | Out-String
+        
+        If ($HtmlFragment){
+            $Body = "$CInfo $HtmlFragment $SqlSer $DbState $DbConns $SqlVer $DBInfo $DBJob $SqlLog $SqlErr"
+        }
+        Else{
+            $Body = "$CInfo $SqlSer $DbState $DbConns $SqlVer $DBInfo $DBJob $SqlLog $SqlErr"
+        }
+
 
         Write-Verbose "Generating SQL Server HTML Report..."
         If (Test-Path $OutputPath){
-            ConvertTo-Html -Head $Head -Body "$CInfo $SqlSer $DbState $DbConns $SqlVer $DBInfo $DBJob $SqlLog $SqlErr" -Title "SQL Server Pre-flight Check Report" | 
-                Out-File "$OutputPath\$ComputerName-Pre.html"
+            ConvertTo-Html -Head $Head -Body "$Body" -Title "SQL Server $Suffix-flight Check Report" | 
+                Out-File "$OutputPath\$ComputerName-$Suffix.html"
         }
         Else {  
             $OutFile =  [Environment]::GetFolderPath("Desktop")
-            ConvertTo-Html -Head $Head -Body "$CInfo $SqlSer $DbState $DbConns $SqlVer $DBInfo $DBJob $SqlLog $SqlErr" -Title "SQL Server Pre-flight Check Report" | 
-                Out-File "$OutFile\$ComputerName-Pre.html" -Force
+            ConvertTo-Html -Head $Head -Body "$Body" -Title "SQL Server $Suffix-flight Check Report" | 
+                Out-File "$OutFile\$ComputerName-$Suffix.html" -Force
         }
     }
 }

@@ -79,7 +79,7 @@ Function Start-SQLServices{
     Process {
         If (Test-Path -Path $CsvFile){
             $Csv = Import-Csv -Path $CsvFile            
-            $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty Name)            
+            $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty ServiceName)            
         }
         Elseif(Test-Path -Path $MasterList){            
             $ServiceList = Import-PowerShellDataFile -Path $MasterList
