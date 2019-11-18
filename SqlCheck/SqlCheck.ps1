@@ -1,6 +1,12 @@
 #Requires -Modules DbaTools
 
 # This script requires DbaTools PowerShell Module
+# Arguments for Preflight check
+$Params = @{
+    ReportPath = "\\FileServer\reports\PreFlightChecks"
+    CsvPath    = "\\FileServer\reports\CSV"
+    MasterList = "\\FileServer\reports\Scripts\MasterList.psd1"
+}
 Function Start-PreflightCheck{
 
     [CmdletBinding()]
@@ -18,28 +24,66 @@ Function Start-PreflightCheck{
             $AttribCollection = New-Object System.Collections.ObjectModel.Collection[System.Attribute]
             $AttribCollection.Add($Attrib)
 
-            $DynSJC = New-Object System.Management.Automation.RuntimeDefinedParameter("SkipJobCheck",[Switch],$Attrib)
-            $DynSBC = New-Object System.Management.Automation.RuntimeDefinedParameter("SkipBackupCheck",[Switch],$Attrib)
+            $DynNoDC = New-Object System.Management.Automation.RuntimeDefinedParameter("NoDriveCheck",[Switch],$Attrib)
+            $DynNoJC = New-Object System.Management.Automation.RuntimeDefinedParameter("NoJobCheck",[Switch],$Attrib)
+            $DynNoBC = New-Object System.Management.Automation.RuntimeDefinedParameter("NoBackupCheck",[Switch],$Attrib)
 
             $ParamDictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
-            $ParamDictionary.Add("SkipJobCheck", $DynSJC)
-            $ParamDictionary.Add("SkipBackupCheck", $DynSBC)
+            $ParamDictionary.Add("NoDriveCheck", $DynNoDC)
+            $ParamDictionary.Add("NoJobCheck", $DynNoJC)
+            $ParamDictionary.Add("NoBackupCheck", $DynNoBC)
             return $ParamDictionary
         }
     }
     Begin{
-        $ReportPath = "\\FileServer\reports\PreFlightChecks"
-        $CsvPath    = "\\FileServer\reports\CSV"
+        $ReportPath = $Params.ReportPath
+        $CsvPath    = $Params.CsvPath
     }
     Process{
         If (-Not(Test-Path -path $ReportPath)){
             Write-Warning "$ReportPath Path not found"
-            Exit 1
+            [Environment]::Exit(2)
         }
         If (-Not(Test-Path -path $CsvPath)){
             Write-Warning "$CsvPath Path not found"
-            Exit 1
+            [Environment]::Exit(2)
         }
+        Write-Verbose "Function Call: Get-SqlServiceCsvReport"
+        Get-SqlServiceCsvReport -ComputerName $ComputerName -OutputPath $CsvPath
+
+        Write-Verbose "Function Call: Get-SQLServerHtmlReport"
+        Get-SQLServerHtmlReport -ComputerName $ComputerName -OutputPath $ReportPath
+        
+        If(-Not($PSBoundParameters.ContainsKey('SkipDriveCheck'))){
+            Write-Verbose "Function Call: Test-DriveSpace"
+            If (!(Test-DriveSpace -ComputerName $ComputerName -Drive "C:" -SizeGB 5)){                
+                Write-Warning "There is not enough space on C drive."            
+                [Environment]::Exit(3)
+            }
+        }
+        
+        If(-Not($PSBoundParameters.ContainsKey('SkipJobCheck'))){
+            Write-Verbose "Function Call: Test-SQLJobActivity"
+            If(Test-SQLJobActivity -ComputerName $ComputerName){
+                Write-Warning "SQL agent job is still running! Please check the report."                
+                [Environment]::Exit(4)
+            }
+        }
+        
+        If(-Not($PSBoundParameters.ContainsKey('SkipBackupCheck'))){
+            Write-Verbose "Function Call: Get-SQLJobActivity"
+            $BackupJob = Get-SQLJobActivity -ComputerName $ComputerName | Where-Object{($_.Name -like "*Backup*") -and ($_.LastRunOutcome -like 'Failed')}
+            If($BackupJob){
+                Write-Warning "Failed Backup job(s) found! Please check the report."                
+                [Environment]::Exit(5)
+            }
+        }
+
+        If ($StopService){
+            Write-Verbose "Function Call: Stop-SqlServices"
+            Stop-SQLServices -ComputerName $ComputerName -Wait
+        }
+
     }    
 }
 Function Get-DriveSpace{
@@ -86,7 +130,7 @@ Function Test-DriveSpace{
         [Double]$SizeGB = 5
     )
     Process{
-        $TestDrive = Get-DriveSpace -ComputerName $ComputerName | Where-Object{$_.Drive -eq $Drive}
+        $TestDrive = Get-DriveSpace -ComputerName $ComputerName -Drive $Drive
         return ([Double]$TestDrive.FreeSpaceGB -gt [Double]$SizeGB)
     }
 <#
@@ -123,6 +167,7 @@ Function Get-DbConnection{
         [String]$ComputerName
     )
     Process{
+        Write-Verbose "$Computername - Retrieving total connection session..."
         $Query  = 'SELECT DB_NAME(database_id) AS DatabaseName, COUNT(session_id) AS TotalConnections FROM sys.dm_exec_sessions GROUP BY DB_NAME(database_id)'
         If([Version](Get-SQLServerVersion -ComputerName $ComputerName).version -lt '11.00'){
             $Query = 'SELECT DB_NAME(dbid) AS DatabaseName, COUNT(dbid) AS TotalConnections FROM sys.sysprocesses GROUP BY DB_NAME(dbid)'
@@ -130,7 +175,7 @@ Function Get-DbConnection{
         $QueryParam = @{
             SqlInstance = $ComputerName
             Query  = $Query
-        }
+        }        
         $Property = @('DatabaseName','TotalConnections')
         Invoke-DbaQuery @QueryParam | Select-Object -Property $Property
     }
@@ -321,7 +366,7 @@ Function Start-SQLServices{
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
         [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
-        [System.IO.FileInfo]$MasterList = '\\FileServer\reports\Scripts\MasterList.psd1'
+        [System.IO.FileInfo]$MasterList = "\\FileServer\reports\Scripts\MasterList.psd1"
     )
     Begin {
         $RunningSrv = @()
@@ -331,7 +376,7 @@ Function Start-SQLServices{
     Process {
         If (Test-Path -Path $CsvFile){
             $Csv = Import-Csv -Path $CsvFile            
-            $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty Name)            
+            $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty ServiceName)            
         }
         Elseif(Test-Path -Path $MasterList){            
             $ServiceList = Import-PowerShellDataFile -Path $MasterList
@@ -453,7 +498,7 @@ Function Get-SQLServerHtmlReport{
         $DBInfo  = Get-DbBackupInfo -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>Database Backup Info</h4>' -PostContent '<br/>' | Out-String
         $DBJob   = Get-SQLJobActivity -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Job Activities</h4>' -PostContent '<br/>' | Out-String
         $SqlLog  = Get-SQLLog -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Log from today</h4>' -PostContent '<br/>' | Out-String
-        $SqlErr  = Get-DbErrorLog -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Error Log from today</h4>' -PostContent '<br/>' | Out-String
+        #$SqlErr  = Get-DbErrorLog -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>SQL Error Log from today</h4>' -PostContent '<br/>' | Out-String
 
         Write-Verbose "Generating SQL Server HTML Report..."
         If (Test-Path $OutputPath){
@@ -476,7 +521,7 @@ Function Get-SQLServiceCsvReport{
         [System.IO.FileInfo]$OutputPath = "\\FileServer\Reports\CSV"
     )
     Process{
-        Write-Verbose "Generating CSV for SQL services..."
+        Write-Verbose "$ComputerName - Saving SQL services to CSV file..."
         Get-SQLServices -ComputerName $ComputerName | Export-Csv -Path "$OutputPath\$ComputerName.csv" -NoTypeInformation
     }    
 }
