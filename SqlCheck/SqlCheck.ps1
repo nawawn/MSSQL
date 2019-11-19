@@ -6,7 +6,7 @@ $Params = @{
     PreReportPath  = "\\FileServer\reports\PreFlightChecks"
     PostReportPath = "\\FileServer\reports\PostFlightChecks"
     CsvPath        = "\\FileServer\reports\CSV"
-    MasterList     = "\\FileServer\reports\Scripts\MasterList.psd1"
+    MasterConfig   = "\\FileServer\reports\Scripts\MasterList.psd1"
 }
 Function Start-PreflightCheck{
 
@@ -14,7 +14,9 @@ Function Start-PreflightCheck{
     Param(
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [String]$ComputerName,
-        [Switch]$StopService
+        [Switch]$StopService,
+        [String]$ReportPath,
+        [String]$CsvPath
     )
     DynamicParam{
         If ($StopService){
@@ -36,10 +38,7 @@ Function Start-PreflightCheck{
             return $ParamDictionary
         }
     }
-    Begin{
-        $ReportPath = $Params.PreReportPath
-        $CsvPath    = $Params.CsvPath
-    }
+    Begin{}
     Process{
         If (-Not(Test-Path -path $ReportPath)){
             Write-Warning "$ReportPath Path not found"
@@ -84,7 +83,6 @@ Function Start-PreflightCheck{
             Write-Verbose "Function Call: Stop-SqlServices"
             Stop-SQLServices -ComputerName $ComputerName
         }
-
     }    
 }
 
@@ -93,11 +91,11 @@ Function Start-PostflightCheck{
     Param(
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [String]$ComputerName,
-        [Switch]$StartService
+        [Switch]$StartService,
+        [String]$ReportPath,
+        [String]$MasterConfig
     )
-    Begin{
-        $ReportPath = $Params.PostReportPath
-    }
+    Begin{}
     Process{
         Write-Verbose "Function Call: Get-SQLServices"
         $BeforeStart  = Get-SQLServices -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>Before SQL Services Restart</h4>' -PostContent '<br/>' | Out-String
@@ -438,7 +436,7 @@ Function Start-SQLServices{
     }
 }
 
-Function Get-SQLServerHtmlReport{
+Function Get-SqlServerHtmlReport{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
@@ -488,7 +486,7 @@ Function Get-SQLServerHtmlReport{
     }
 }
 
-Function Get-SQLServiceCsvReport{
+Function Get-SqlServiceCsvReport{
     Param(
         [Parameter(ValueFromPipeline,ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
@@ -501,7 +499,7 @@ Function Get-SQLServiceCsvReport{
     }    
 }
 
-Function Get-ServicePsd1{
+Function Get-SqlServicePsd1{
     Param(
             [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName,Position=0)]
             [String]$ComputerName
