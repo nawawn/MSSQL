@@ -54,32 +54,32 @@ Function Start-PreflightCheck{
         Write-Verbose "Function Call: Get-SQLServerHtmlReport"
         Get-SQLServerHtmlReport -ComputerName $ComputerName -OutputPath $ReportPath -Suffix 'Pre'
         
-        If(-Not($PSBoundParameters.ContainsKey('SkipDriveCheck'))){
-            Write-Verbose "Function Call: Test-DriveSpace"
-            If (!(Test-DriveSpace -ComputerName $ComputerName -Drive "C:" -SizeGB 5)){                
-                Write-Warning "There is not enough space on C drive."            
-                [Environment]::Exit(3)
-            }
-        }
-        
-        If(-Not($PSBoundParameters.ContainsKey('SkipJobCheck'))){
-            Write-Verbose "Function Call: Test-SQLJobActivity"
-            If(Test-SQLJobActivity -ComputerName $ComputerName){
-                Write-Warning "SQL agent job is still running! Please check the report."                
-                [Environment]::Exit(4)
-            }
-        }
-        
-        If(-Not($PSBoundParameters.ContainsKey('SkipBackupCheck'))){
-            Write-Verbose "Function Call: Get-SQLJobActivity"
-            $BackupJob = Get-SQLJobActivity -ComputerName $ComputerName | Where-Object{($_.Name -like "*Backup*") -and ($_.LastRunOutcome -like 'Failed')}
-            If($BackupJob){
-                Write-Warning "Failed Backup job(s) found! Please check the report."                
-                [Environment]::Exit(5)
-            }
-        }
-
         If ($StopService){
+            If(-Not($PSBoundParameters.ContainsKey('NoDriveCheck'))){
+                Write-Verbose "Function Call: Test-DriveSpace"
+                If (!(Test-DriveSpace -ComputerName $ComputerName -Drive "C:" -SizeGB 5)){                
+                    Write-Warning "There is not enough space on C drive."            
+                    [Environment]::Exit(3)
+                }
+            }
+            
+            If(-Not($PSBoundParameters.ContainsKey('NoJobCheck'))){
+                Write-Verbose "Function Call: Test-SQLJobActivity"
+                If(Test-SQLJobActivity -ComputerName $ComputerName){
+                    Write-Warning "SQL agent job is still running! Please check the report."                
+                    [Environment]::Exit(4)
+                }
+            }
+            
+            If(-Not($PSBoundParameters.ContainsKey('NoBackupCheck'))){
+                Write-Verbose "Function Call: Get-SQLJobActivity"
+                $BackupJob = Get-SQLJobActivity -ComputerName $ComputerName | Where-Object{($_.Name -like "*Backup*") -and ($_.LastRunOutcome -like 'Failed')}
+                If($BackupJob){
+                    Write-Warning "Failed Backup job(s) found! Please check the report."                
+                    [Environment]::Exit(5)
+                }
+            }
+
             Write-Verbose "Function Call: Stop-SqlServices"
             Stop-SQLServices -ComputerName $ComputerName
         }
@@ -177,7 +177,7 @@ Function Get-DbState{
             Database   = 'master'
             Query      = 'SELECT name,state_desc,user_access_desc,recovery_model_desc FROM sys.databases'
         }
-        Write-Verbose "$ComputerName - Retreiving Database State Information..."
+        Write-Verbose "$ComputerName - Retrieving Database State Information..."
         #Invoke-Sqlcmd -ServerInstance $ComputerName -Database 'master' -Query 'SELECT name,state_desc,user_access_desc,recovery_model_desc FROM sys.databases'
         $Property = @('name','state_desc','user_access_desc','recovery_model_desc')
         Invoke-DbaQuery @QueryParam | Select-Object -Property $Property
@@ -217,7 +217,7 @@ Function Get-SQLServerVersion {
         $QueryParam.Add('Database',    'master')
         $QueryParam.Add('Query',       "SELECT @@SERVERNAME AS ServerName, @@VERSION AS SQLVersion, (SELECT SERVERPROPERTY('ResourceVersion')) As Version")    
         
-        Write-Verbose "$ComputerName - Retreiving SQL Server Version Information..."
+        Write-Verbose "$ComputerName - Retrieving SQL Server Version Information..."
         #Invoke-Sqlcmd -ServerInstance $ComputerName -Database 'master' -Query "SELECT @@SERVERNAME AS ServerName, @@VERSION AS ServerVersion, (SELECT SERVERPROPERTY('ResourceVersion')) As Version"
         $Property = @('ServerName','SQLVersion','Version')
         Invoke-DbaQuery @QueryParam | Select-Object -Property $Property
@@ -231,7 +231,7 @@ Function Get-DbBackupInfo{
         [String]$ComputerName
     )
     Process{
-        Write-Verbose "$ComputerName - Retreiving SQL Database Backup Information..."
+        Write-Verbose "$ComputerName - Retrieving SQL Database Backup Information..."
         #$Property = @('Name','RecoveryModel','LastBackupDate','LastLogBackupDate','Owner','UserAccess','ActiveConnections','Size','Collation','CompatibilityLevel')
         #Get-SqlDatabase -ServerInstance $ComputerName | Select-Object -Property $Property
         $Property = @('Name','RecoveryModel','LastFullBackup','LastLogBackup','Owner','UserAccess','ActiveConnections','SizeMB','Collation','Compatibility')
@@ -246,7 +246,7 @@ Function Get-SQLJobActivity{
         [String]$ComputerName
     )
     Process{
-        Write-Verbose "$ComputerName - Retreiving SQL Server Agent Job..."
+        Write-Verbose "$ComputerName - Retrieving SQL Server Agent Job..."
         #$Property = @('Name','IsEnabled','JobSteps','CurrentRunStatus','LastRunOutcome','LastRunDate','NextRunDate','Category')
         #Get-SqlAgentJob -ServerInstance $ComputerName | Select-Object -Property $Property
         $Property = @('Name','IsEnabled','JobSteps','CurrentRunStatus','LastRunOutcome','LastRunDate','NextRunDate','Category')
