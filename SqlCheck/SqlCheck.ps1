@@ -6,7 +6,7 @@ $Params = @{
     PreReportPath  = "\\FileServer\reports\PreFlightChecks"
     PostReportPath = "\\FileServer\reports\PostFlightChecks"
     CsvPath        = "\\FileServer\reports\CSV"
-    MasterConfig   = "\\FileServer\reports\Scripts\MasterList.psd1"
+    MasterConfig   = "\\FileServer\reports\Scripts\MasterConfig.psd1"
 }
 Function Start-PreflightCheck{
 
@@ -93,6 +93,7 @@ Function Start-PostflightCheck{
         [String]$ComputerName,
         [Switch]$StartService,
         [String]$ReportPath,
+        [String]$CsvPath,
         [String]$MasterConfig
     )
     Begin{}
@@ -102,7 +103,7 @@ Function Start-PostflightCheck{
         
         If ($StartService){
             Write-Verbose "Function Call: Start-SQLServices"
-            Start-SQLServices -ComputerName $ComputerName
+            Start-SQLServices -ComputerName $ComputerName -ReportPath $ReportPath -CSVPath $CsvPath -MasterConfig $MasterConfig
         }
 
         Write-Verbose "Function Call: Get-SQLServerHtmlReport"
@@ -392,7 +393,7 @@ Function Start-SQLServices{
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
         [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
-        [System.IO.FileInfo]$MasterList = "\\FileServer\reports\Scripts\MasterList.psd1"
+        [System.IO.FileInfo]$MasterConfig = "\\FileServer\reports\Scripts\MasterConfig.psd1"
     )
     Begin {
         $RunningSrv = @()
@@ -404,8 +405,8 @@ Function Start-SQLServices{
             $Csv = Import-Csv -Path $CsvFile            
             $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty ServiceName)            
         }
-        Elseif(Test-Path -Path $MasterList){            
-            $ServiceList = Import-PowerShellDataFile -Path $MasterList
+        Elseif(Test-Path -Path $MasterConfig){            
+            $ServiceList = Import-PowerShellDataFile -Path $MasterConfig
             $RunningSrv = $($ServiceList.$ComputerName.Running.Name)            
         }
         Else{
