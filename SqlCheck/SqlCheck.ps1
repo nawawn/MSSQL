@@ -6,17 +6,16 @@ $Params = @{
     PreReportPath  = "\\FileServer\reports\PreFlightChecks"
     PostReportPath = "\\FileServer\reports\PostFlightChecks"
     CsvPath        = "\\FileServer\reports\CSV"
-    MasterConfig   = "\\FileServer\reports\Scripts\MasterConfig.psd1"
+    MasterConfig     = "\\FileServer\reports\Scripts\MasterConfig.psd1"
 }
 Function Start-PreflightCheck{
-
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName,Position = 0)]
         [String]$ComputerName,
         [Switch]$StopService,
-        [String]$ReportPath,
-        [String]$CsvPath
+        [Parameter(Mandatory)][System.IO.FileInfo]$ReportPath, 
+        [Parameter(Mandatory)][System.IO.FileInfo]$CsvPath
     )
     DynamicParam{
         If ($StopService){
@@ -53,7 +52,6 @@ Function Start-PreflightCheck{
 
         Write-Verbose "Function Call: Get-SQLServerHtmlReport"
         Get-SQLServerHtmlReport -ComputerName $ComputerName -OutputPath $ReportPath -Suffix 'Pre'
-        
         If ($StopService){
             If(-Not($PSBoundParameters.ContainsKey('NoDriveCheck'))){
                 Write-Verbose "Function Call: Test-DriveSpace"
@@ -61,16 +59,14 @@ Function Start-PreflightCheck{
                     Write-Warning "There is not enough space on C drive."            
                     [Environment]::Exit(3)
                 }
-            }
-            
+            }        
             If(-Not($PSBoundParameters.ContainsKey('NoJobCheck'))){
                 Write-Verbose "Function Call: Test-SQLJobActivity"
                 If(Test-SQLJobActivity -ComputerName $ComputerName){
                     Write-Warning "SQL agent job is still running! Please check the report."                
                     [Environment]::Exit(4)
                 }
-            }
-            
+            }        
             If(-Not($PSBoundParameters.ContainsKey('NoBackupCheck'))){
                 Write-Verbose "Function Call: Get-SQLJobActivity"
                 $BackupJob = Get-SQLJobActivity -ComputerName $ComputerName | Where-Object{($_.Name -like "*Backup*") -and ($_.LastRunOutcome -like 'Failed')}
@@ -78,8 +74,7 @@ Function Start-PreflightCheck{
                     Write-Warning "Failed Backup job(s) found! Please check the report."                
                     [Environment]::Exit(5)
                 }
-            }
-
+            }        
             Write-Verbose "Function Call: Stop-SqlServices"
             Stop-SQLServices -ComputerName $ComputerName
         }
@@ -89,21 +84,22 @@ Function Start-PreflightCheck{
 Function Start-PostflightCheck{
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName,Position = 0)]
         [String]$ComputerName,
         [Switch]$StartService,
-        [String]$ReportPath,
-        [String]$CsvPath,
-        [String]$MasterConfig
+        [Parameter(Mandatory)]
+        [System.IO.FileInfo]$ReportPath,
+        [Parameter(Mandatory)]
+        [System.IO.FileInfo]$CSVPath,
+        [System.IO.FileInfo]$MasterConfig
     )
-    Begin{}
     Process{
         Write-Verbose "Function Call: Get-SQLServices"
         $BeforeStart  = Get-SQLServices -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>Before SQL Services Restart</h4>' -PostContent '<br/>' | Out-String
         
         If ($StartService){
             Write-Verbose "Function Call: Start-SQLServices"
-            Start-SQLServices -ComputerName $ComputerName -ReportPath $ReportPath -CSVPath $CsvPath -MasterConfig $MasterConfig
+            Start-SQLServices -ComputerName $ComputerName
         }
 
         Write-Verbose "Function Call: Get-SQLServerHtmlReport"
@@ -178,7 +174,7 @@ Function Get-DbState{
             Database   = 'master'
             Query      = 'SELECT name,state_desc,user_access_desc,recovery_model_desc FROM sys.databases'
         }
-        Write-Verbose "$ComputerName - Retrieving Database State Information..."
+        Write-Verbose "$ComputerName - Retreiving Database State Information..."
         #Invoke-Sqlcmd -ServerInstance $ComputerName -Database 'master' -Query 'SELECT name,state_desc,user_access_desc,recovery_model_desc FROM sys.databases'
         $Property = @('name','state_desc','user_access_desc','recovery_model_desc')
         Invoke-DbaQuery @QueryParam | Select-Object -Property $Property
@@ -218,7 +214,7 @@ Function Get-SQLServerVersion {
         $QueryParam.Add('Database',    'master')
         $QueryParam.Add('Query',       "SELECT @@SERVERNAME AS ServerName, @@VERSION AS SQLVersion, (SELECT SERVERPROPERTY('ResourceVersion')) As Version")    
         
-        Write-Verbose "$ComputerName - Retrieving SQL Server Version Information..."
+        Write-Verbose "$ComputerName - Retreiving SQL Server Version Information..."
         #Invoke-Sqlcmd -ServerInstance $ComputerName -Database 'master' -Query "SELECT @@SERVERNAME AS ServerName, @@VERSION AS ServerVersion, (SELECT SERVERPROPERTY('ResourceVersion')) As Version"
         $Property = @('ServerName','SQLVersion','Version')
         Invoke-DbaQuery @QueryParam | Select-Object -Property $Property
@@ -232,7 +228,7 @@ Function Get-DbBackupInfo{
         [String]$ComputerName
     )
     Process{
-        Write-Verbose "$ComputerName - Retrieving SQL Database Backup Information..."
+        Write-Verbose "$ComputerName - Retreiving SQL Database Backup Information..."
         #$Property = @('Name','RecoveryModel','LastBackupDate','LastLogBackupDate','Owner','UserAccess','ActiveConnections','Size','Collation','CompatibilityLevel')
         #Get-SqlDatabase -ServerInstance $ComputerName | Select-Object -Property $Property
         $Property = @('Name','RecoveryModel','LastFullBackup','LastLogBackup','Owner','UserAccess','ActiveConnections','SizeMB','Collation','Compatibility')
@@ -247,7 +243,7 @@ Function Get-SQLJobActivity{
         [String]$ComputerName
     )
     Process{
-        Write-Verbose "$ComputerName - Retrieving SQL Server Agent Job..."
+        Write-Verbose "$ComputerName - Retreiving SQL Server Agent Job..."
         #$Property = @('Name','IsEnabled','JobSteps','CurrentRunStatus','LastRunOutcome','LastRunDate','NextRunDate','Category')
         #Get-SqlAgentJob -ServerInstance $ComputerName | Select-Object -Property $Property
         $Property = @('Name','IsEnabled','JobSteps','CurrentRunStatus','LastRunOutcome','LastRunDate','NextRunDate','Category')
@@ -392,19 +388,19 @@ Function Start-SQLServices{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$CSVPath = "\\FileServer\Reports\CSV",
-        [System.IO.FileInfo]$MasterConfig = "\\FileServer\reports\Scripts\MasterConfig.psd1"
+        [Parameter(Madatory)][System.IO.FileInfo]$CSVPath,        
+        [Parameter(Madatory)][System.IO.FileInfo]$MasterConfig
     )
     Begin {
         $RunningSrv = @()
         $SrvToStart = @()
         $CsvFile    = "$CSVPath\$ComputerName.csv"        
     }
-    Process {
+    Process {        
         If (Test-Path -Path $CsvFile){
             $Csv = Import-Csv -Path $CsvFile            
             $RunningSrv = ($Csv | Where-Object{$_.State -eq "Running"} | Select-Object -ExpandProperty ServiceName)            
-        }
+        }        
         Elseif(Test-Path -Path $MasterConfig){            
             $ServiceList = Import-PowerShellDataFile -Path $MasterConfig
             $RunningSrv = $($ServiceList.$ComputerName.Running.Name)            
@@ -437,13 +433,13 @@ Function Start-SQLServices{
     }
 }
 
-Function Get-SqlServerHtmlReport{
+Function Get-SQLServerHtmlReport{
     Param(
         [Parameter()][ValidateNotNullOrEmpty()]
         [String]$ComputerName,
         [String]$HtmlFragment,
         [String]$Suffix = 'Pre',
-        [System.IO.FileInfo]$OutputPath = "\\FileServer\Reports\PreFlightChecks"
+        [System.IO.FileInfo]$OutputPath
     )
     Begin{
         $Head = @"
@@ -473,7 +469,6 @@ Function Get-SqlServerHtmlReport{
             $Body = "$CInfo $SqlSer $DbState $DbConns $SqlVer $DBInfo $DBJob $SqlLog $SqlErr"
         }
 
-
         Write-Verbose "Generating SQL Server HTML Report..."
         If (Test-Path $OutputPath){
             ConvertTo-Html -Head $Head -Body "$Body" -Title "SQL Server $Suffix-flight Check Report" | 
@@ -487,12 +482,12 @@ Function Get-SqlServerHtmlReport{
     }
 }
 
-Function Get-SqlServiceCsvReport{
+Function Get-SQLServiceCsvReport{
     Param(
         [Parameter(ValueFromPipeline,ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
         [String]$ComputerName,
-        [System.IO.FileInfo]$OutputPath = "\\FileServer\Reports\CSV"
+        [System.IO.FileInfo]$OutputPath
     )
     Process{
         Write-Verbose "$ComputerName - Saving SQL services to CSV file..."
@@ -527,3 +522,5 @@ Function Get-SqlServicePsd1{
         Write-Output $end
     }
 }
+
+Export-ModuleMember -Function Start-*,Stop-*,Get-*,Test-*
