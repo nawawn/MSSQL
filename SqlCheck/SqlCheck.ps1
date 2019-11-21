@@ -6,7 +6,7 @@ $Params = @{
     PreReportPath  = "\\FileServer\reports\PreFlightChecks"
     PostReportPath = "\\FileServer\reports\PostFlightChecks"
     CsvPath        = "\\FileServer\reports\CSV"
-    MasterConfig     = "\\FileServer\reports\Scripts\MasterConfig.psd1"
+    MasterConfig   = "\\FileServer\reports\Scripts\MasterConfig.psd1"
 }
 Function Start-PreflightCheck{
     [CmdletBinding()]
