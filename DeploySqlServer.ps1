@@ -157,7 +157,6 @@ Configuration DeployTestSql{
             Ensure      = 'Present'
             Enabled     = 'True'        
         }
-
     }
 }
 
