@@ -135,6 +135,28 @@ Configuration DeployTestSql{
             Ensure      = 'Present'
             Enabled     = 'True'        
         }
+        Firewall SQLAS{
+            Name        = 'SQLAS'
+            DisplayName = 'SQL Analysis Services'
+            Description = 'Allow inbound traffic to SQL Analysis Services'            
+            Profile     = ('Domain','Private')
+            Direction   = 'Inbound'
+            LocalPort   = '2383'          
+            Protocol    = 'TCP'
+            Ensure      = 'Present'
+            Enabled     = 'True'        
+        }
+        Firewall SQLBrowserAS{
+            Name        = 'SQLBrowserAS'
+            DisplayName = 'SQL Browswer Service for Analysis Services'
+            Description = 'Allow inbound traffic to SQL Server Browser service for Analysis Services'            
+            Profile     = ('Domain','Private')
+            Direction   = 'Inbound'
+            LocalPort   = '2382'          
+            Protocol    = 'UDP'
+            Ensure      = 'Present'
+            Enabled     = 'True'        
+        }
     }
 }
 
