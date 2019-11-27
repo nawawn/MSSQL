@@ -62,6 +62,12 @@ Configuration DeployTestSql{
         
             DependsOn = '[WindowsFeature]InstallDotNet'
         }
+        SqlDatabase NewDbaDatabase{
+            Name         = 'DbaDatabase'
+            ServerName   = 'localhost'
+            InstanceName = 'MSSQLServer'
+            DependsOn    = '[SqlSetup]InstallSql'        
+        }
 
         Firewall SQLServer{
             Name        = 'SQLSERVER'
