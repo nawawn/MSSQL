@@ -1,6 +1,6 @@
 #Requires -Modules DbaTools
 
-# This script requires DbaTools PowerShell Module
+# This script requires DbaTools PowerShell Module and SSMS installed.
 # Arguments for Preflight check
 $Params = @{
     PreReportPath  = "\\FileServer\reports\PreFlightChecks"
@@ -84,22 +84,27 @@ Function Start-PreflightCheck{
 Function Start-PostflightCheck{
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName,Position = 0)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName,Position=0)]
         [String]$ComputerName,
         [Switch]$StartService,
         [Parameter(Mandatory)]
         [System.IO.FileInfo]$ReportPath,
         [Parameter(Mandatory)]
         [System.IO.FileInfo]$CSVPath,
-        [System.IO.FileInfo]$MasterConfig
+        [System.IO.FileInfo]$MasterList
     )
+    Begin{}
     Process{
-        Write-Verbose "Function Call: Get-SQLServices"
         $BeforeStart  = Get-SQLServices -ComputerName $ComputerName | ConvertTo-Html -Fragment -PreContent '<h4>Before SQL Services Restart</h4>' -PostContent '<br/>' | Out-String
         
         If ($StartService){
             Write-Verbose "Function Call: Start-SQLServices"
-            Start-SQLServices -ComputerName $ComputerName
+            $StartParam = @{}
+            $StartParam.Add('ComputerName',$ComputerName)            
+            If($CSVPath){   $StartParam.Add('CSVPath',$CSVPath)      }
+            If($MasterList){$StartParam.Add('MasterList',$MasterList)}
+
+            Start-SQLServices @StartParam
         }
 
         Write-Verbose "Function Call: Get-SQLServerHtmlReport"
