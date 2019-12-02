@@ -1,9 +1,9 @@
 ﻿<#
 $Manifest = @{
-    Path = '.\BMSqlCheck\BMSqlCheck.psd1'
-    RootModule = 'BMSqlCheck.psm1'
+    Path = '.\SqlCheck\SqlCheck.psd1'
+    RootModule = 'SqlCheck.psm1'
     Author     = 'Naw Awn'
-    CompanyName = 'The British Museum'
+    CompanyName = 'The Company'
     Description = 'MS SQL Server preflight and postflight check before and after the Windows update'
     RequiredModules = 'DbaTools'
     ScriptsToProcess = Initialise.ps1
@@ -12,7 +12,7 @@ $Manifest = @{
 New-ModuleManifest @Manifest
 #>
 
-#Initialise BMSqlCheck module
+#Initialise SqlCheck module
 If(-Not(Get-PackageProvider).Where{$_.Name -eq 'NuGet'}){   
     Write-Verbose "NuGet Package Manager Not found! Installing it now..."
     Install-PackageProvider -Name "NuGet" -Force -Confirm:$false
